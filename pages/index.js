@@ -6,6 +6,19 @@ export default function Home() {
   const [username, setUsername] = useState('')
   const router = useRouter()
 
+
+
+
+  useEffect(() => {
+    // Prüfen ob als PWA und Admin
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      const isAdmin = localStorage.getItem('isAdmin');
+      if (isAdmin) {
+        router.replace('/admin');
+      }
+    }
+  }, []);
+
   const handleLogin = async (e) => {
     e.preventDefault()
     
