@@ -11,27 +11,31 @@ serve(async (req) => {
   try {
     const payload = await req.json()
     
-    // Hole den Push-Token für den Empfänger
+    // Angepasst an die Struktur, wie der Token in _app.js gespeichert wird
     const { data: tokenData } = await supabase
-      .from('push_tokens')
-      .select('token')
-      .eq('user_id', payload.record.recipient_id)
+      .from('push_subscriptions')
+      .select('subscription')
+      .eq('userType', 'admin')
       .single()
 
-    if (!tokenData?.token) {
+    if (!tokenData?.subscription) {
       return new Response(
-        JSON.stringify({ error: 'Kein Push-Token gefunden' }),
+        JSON.stringify({ error: 'Kein Push-Token für Admin gefunden' }),
         { status: 400 }
       )
     }
 
     // Sende die Nachricht an Expo
     const message = {
-      to: tokenData.token,
+      to: tokenData.subscription,
       sound: 'default',
-      title: 'Neue Nachricht',
-      body: payload.record.content,
-      data: { messageId: payload.record.id }
+      title: 'Neue Nachricht von Gast',
+      body: `${payload.record.guest_name}: ${payload.record.content}`,
+      data: { 
+        messageId: payload.record.id,
+        guestName: payload.record.guest_name,
+        type: 'new_message'
+      }
     }
 
     const response = await fetch('https://exp.host/--/api/v2/push/send', {
@@ -47,12 +51,15 @@ serve(async (req) => {
 
     const result = await response.json()
     
+    console.log('Push notification result:', result)
+    
     return new Response(
       JSON.stringify(result),
       { headers: { 'Content-Type': 'application/json' } }
     )
     
   } catch (error) {
+    console.error('Error sending push notification:', error)
     return new Response(
       JSON.stringify({ error: error.message }),
       { status: 500 }
