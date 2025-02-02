@@ -3,7 +3,7 @@ import MediaUpload from '../MediaUpload';
 import Picker from '@emoji-mart/react';
 import data from '@emoji-mart/data';
 
-export function ChatArea({ 
+export function ChatArea({
   selectedGuest,
   messages,
   inputMessage,
@@ -17,15 +17,17 @@ export function ChatArea({
   onMediaUpload
 }) {
   return (
-    <div className="flex-1 p-2 overflow-hidden flex flex-col">
-      <div className="flex-1 bg-gray-800/90 backdrop-blur-lg rounded-lg shadow-sm overflow-hidden mb-4">
+    <div className="flex-1 flex flex-col h-[calc(100vh-4rem)] sm:h-[calc(100vh-4.5rem)] relative">
+      {/* Main chat container */}
+      <div className="flex-1 bg-gray-800/90 backdrop-blur-lg rounded-lg shadow-sm overflow-hidden">
         <AdminChatWindow messages={messages} />
       </div>
 
-      <div className="bg-gray-800/90 backdrop-blur-lg rounded-lg p-2">
+      {/* Input container */}
+      <div className="mt-2 bg-gray-800/90 backdrop-blur-lg rounded-lg p-3">
         {/* Media Preview */}
         {previewMedia && (
-          <div className="mb-2">
+          <div className="mb-3">
             {previewMedia.type === 'image' && (
               <div className="relative inline-block">
                 <img
@@ -35,10 +37,14 @@ export function ChatArea({
                 />
                 <button
                   onClick={() => setPreviewMedia(null)}
-                  className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full"
+                  className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 transition-colors"
                 >
                   <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                    <path
+                      fillRule="evenodd"
+                      d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                      clipRule="evenodd"
+                    />
                   </svg>
                 </button>
               </div>
@@ -85,11 +91,14 @@ export function ChatArea({
 
         {/* Emoji Picker */}
         {isEmojiPickerOpen && (
-          <div className="absolute bottom-full right-0 mb-2">
+          <div className="absolute bottom-full right-0 mb-2 z-50">
             <div className="bg-gray-800 rounded-lg shadow-xl">
               <Picker
                 data={data}
-                onEmojiSelect={onEmojiSelect}
+                onEmojiSelect={(emoji) => {
+                  onEmojiSelect(emoji);
+                  setIsEmojiPickerOpen(false);
+                }}
                 theme="dark"
                 previewPosition="none"
                 skinTonePosition="none"
