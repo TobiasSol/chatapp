@@ -24,24 +24,29 @@ export default function Chat() {
     setUsername(storedUsername);
 
     const loadMessages = async () => {
-      const { data, error } = await supabase
-        .from('messages')
-        .select('*')
-        .or(`guest_name.eq.${storedUsername},sender.eq.admin`)
-        .order('created_at', { ascending: true });
+      try {
+        const { data, error } = await supabase
+          .from('messages')
+          .select('*')
+          .or(`guest_name.eq.${storedUsername},and(sender.eq.admin,guest_name.eq.${storedUsername})`)
+          .order('created_at', { ascending: true });
       
-      if (error) {
-        console.error('Error loading messages:', error);
-        return;
+        if (error) {
+          console.error('Error loading messages:', error);
+          toast.error('Failed to load messages');
+          return;
+        }
+      
+        setMessages(data || []);
+      } catch (err) {
+        console.error('Error loading messages:', err);
+        toast.error('Failed to load messages');
       }
-      
-      // Filter messages for this specific user
-      const filteredMessages = data.filter(msg => msg.guest_name === storedUsername);
-      setMessages(filteredMessages || []);
     };
 
     loadMessages();
 
+    // Subscribe to new messages
     const messagesChannel = supabase
       .channel('messages')
       .on(
@@ -60,14 +65,54 @@ export default function Chat() {
 
     // Update activity status
     const updateActivity = async () => {
-      await supabase
-        .from('guests')
-        .update({ last_activity: new Date().toISOString() })
-        .eq('username', storedUsername);
+      try {
+        const { error } = await supabase
+          .from('guests')
+          .update({ 
+            last_activity: new Date().toISOString() 
+          })
+          .eq('username', storedUsername);
+
+        if (error) {
+          console.error('Error updating activity:', error);
+        }
+      } catch (err) {
+        console.error('Error updating activity:', err);
+      }
     };
 
     const interval = setInterval(updateActivity, 30000);
     updateActivity();
+
+    // Setup notifications
+    if ('Notification' in window) {
+      const notificationChannel = supabase
+        .channel('message-notifications')
+        .on(
+          'postgres_changes',
+          { 
+            event: 'INSERT', 
+            schema: 'public', 
+            table: 'messages',
+            filter: `guest_name=eq.${storedUsername}` 
+          },
+          async (payload) => {
+            if (document.hidden && Notification.permission === 'granted') {
+              new Notification('New Message', {
+                body: `New message from ${payload.new.sender}`,
+                icon: '/icon.png'
+              });
+            }
+          }
+        )
+        .subscribe();
+
+      return () => {
+        messagesChannel.unsubscribe();
+        notificationChannel.unsubscribe();
+        clearInterval(interval);
+      };
+    }
 
     return () => {
       messagesChannel.unsubscribe();
@@ -106,35 +151,6 @@ export default function Chat() {
       console.error('Error sending message:', error);
     }
   };
-
-
-
-// pages/chat.js
-useEffect(() => {
-  const channel = supabase
-    .channel('messages')
-    .on(
-      'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'messages' },
-      async (payload) => {
-        if (document.hidden && 'Notification' in window) {
-          const notification = new Notification('Neue Nachricht', {
-            body: `Neue Nachricht von ${payload.new.sender}`,
-            icon: '/icon.png'
-          });
-        }
-      }
-    )
-    .subscribe();
-
-  return () => {
-    channel.unsubscribe();
-  };
-}, []);
-
-
-
-
 
   const handleMediaUpload = (url, fileType) => {
     if (!url) {
