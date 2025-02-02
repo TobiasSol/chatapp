@@ -18,6 +18,9 @@ function MyApp({ Component, pageProps }) {
     }
   }, [router]);
 
+
+
+
   // Service Worker Registration
   useEffect(() => {
     if ('serviceWorker' in navigator && 'PushManager' in window) {
@@ -25,27 +28,25 @@ function MyApp({ Component, pageProps }) {
         .register('/service-worker.js')
         .then(async (registration) => {
           console.log('ServiceWorker registered:', registration);
-
+  
           try {
             const permission = await Notification.requestPermission();
             
             if (permission === 'granted') {
-              // Convert VAPID key to Uint8Array
               const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
               const convertedVapidKey = urlBase64ToUint8Array(vapidPublicKey);
-
+  
               const subscription = await registration.pushManager.subscribe({
                 userVisibleOnly: true,
                 applicationServerKey: convertedVapidKey
               });
-
-              // Save subscription to backend
+  
               const userId = localStorage.getItem('isAdmin') 
                 ? localStorage.getItem('adminUsername')
                 : localStorage.getItem('username');
-
+  
               if (userId) {
-                await fetch('/api/push-subscription', {
+                await fetch('/api/save-subscription', {  // Geänderter Endpoint
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',
@@ -65,6 +66,8 @@ function MyApp({ Component, pageProps }) {
         .catch((err) => console.error('ServiceWorker registration failed:', err));
     }
   }, []);
+
+
 
   // Helper function to convert VAPID key
   function urlBase64ToUint8Array(base64String) {

@@ -38,37 +38,45 @@ self.addEventListener('install', (event) => {
     );
   });
   
-  self.addEventListener('push', (event) => {
-    let notificationData = {};
+
+
+
+// public/service-worker.js
+
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+
+  try {
+    const data = event.data.json();
     
-    try {
-      notificationData = event.data.json();
-    } catch (e) {
-      notificationData = {
-        title: 'Chat Benachrichtigung',
-        message: event.data.text()
-      };
-    }
-  
     const options = {
-      body: notificationData.message || notificationData.body || 'Neue Nachricht',
+      body: data.message || 'Neue Nachricht',
       icon: '/icon.png',
       badge: '/badge.png',
-      vibrate: [100, 50, 100],
       data: {
-        dateOfArrival: Date.now(),
-        primaryKey: '1',
-        url: notificationData.url || '/'
+        url: '/'
       }
     };
-  
+
     event.waitUntil(
-      self.registration.showNotification(
-        notificationData.title || 'Chat Benachrichtigung',
-        options
-      )
+      self.registration.showNotification('Chat Benachrichtigung', options)
     );
-  });
+  } catch (e) {
+    console.error('Error showing notification:', e);
+  }
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  
+  event.waitUntil(
+    clients.openWindow(event.notification.data.url || '/')
+  );
+});
+
+
+
+
   
   self.addEventListener('notificationclick', (event) => {
     event.notification.close();

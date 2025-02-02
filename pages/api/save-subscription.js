@@ -1,4 +1,3 @@
-// pages/api/save-subscription.js
 import { supabase } from '../../lib/supabase';
 
 export default async function handler(req, res) {
@@ -15,7 +14,6 @@ export default async function handler(req, res) {
         subscription: subscription,
         user_type: userType,
         user_id: userId,
-        created_at: new Date().toISOString()
       }, {
         onConflict: 'user_id'
       });
