@@ -107,6 +107,35 @@ export default function Chat() {
     }
   };
 
+
+
+// pages/chat.js
+useEffect(() => {
+  const channel = supabase
+    .channel('messages')
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'messages' },
+      async (payload) => {
+        if (document.hidden && 'Notification' in window) {
+          const notification = new Notification('Neue Nachricht', {
+            body: `Neue Nachricht von ${payload.new.sender}`,
+            icon: '/icon.png'
+          });
+        }
+      }
+    )
+    .subscribe();
+
+  return () => {
+    channel.unsubscribe();
+  };
+}, []);
+
+
+
+
+
   const handleMediaUpload = (url, fileType) => {
     if (!url) {
       setPreviewMedia(null);
