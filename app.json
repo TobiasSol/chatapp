@@ -5,6 +5,13 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "notification": {
+      "icon": "./public/icons/push-icon.png",
+      "color": "#000000",
+      "iosDisplayInForeground": true,
+      "androidMode": "default",
+      "androidCollapsedTitle": "New Message"
+    },
     "updates": {
       "fallbackToCacheTimeout": 0
     },
@@ -13,13 +20,23 @@
       "bundleIdentifier": "com.tobdevss.chatapp"
     },
     "android": {
-      "package": "com.tobdevss.chatapp"
+      "package": "com.tobdevss.chatapp",
+      "googleServicesFile": "./google-services.json"
     },
     "extra": {
       "eas": {
         "projectId": "e46b74f6-a6ad-45a1-af6f-dcdf1ee65f6f"
       }
     },
-    "owner": "tobdevss"
+    "owner": "tobdevss",
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./public/icons/push-icon.png",
+          "color": "#000000"
+        }
+      ]
+    ]
   }
 }
