@@ -7,8 +7,25 @@ self.addEventListener('install', (event) => {
           '/admin',
           '/login',
           '/chat',
+          '/icon.png',
+          '/badge.png',
+          '/manifest.json',
           // Weitere wichtige Assets
         ]);
+      })
+    );
+  });
+  
+  self.addEventListener('activate', (event) => {
+    event.waitUntil(
+      caches.keys().then((cacheNames) => {
+        return Promise.all(
+          cacheNames.map((cacheName) => {
+            if (cacheName !== 'chat-app-v1') {
+              return caches.delete(cacheName);
+            }
+          })
+        );
       })
     );
   });
@@ -22,18 +39,56 @@ self.addEventListener('install', (event) => {
   });
   
   self.addEventListener('push', (event) => {
+    let notificationData = {};
+    
+    try {
+      notificationData = event.data.json();
+    } catch (e) {
+      notificationData = {
+        title: 'Chat Benachrichtigung',
+        message: event.data.text()
+      };
+    }
+  
     const options = {
-      body: event.data.text(),
+      body: notificationData.message || notificationData.body || 'Neue Nachricht',
       icon: '/icon.png',
       badge: '/badge.png',
       vibrate: [100, 50, 100],
       data: {
         dateOfArrival: Date.now(),
-        primaryKey: '1'
+        primaryKey: '1',
+        url: notificationData.url || '/'
       }
     };
   
     event.waitUntil(
-      self.registration.showNotification('Chat Benachrichtigung', options)
+      self.registration.showNotification(
+        notificationData.title || 'Chat Benachrichtigung',
+        options
+      )
+    );
+  });
+  
+  self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+  
+    event.waitUntil(
+      clients.matchAll({
+        type: 'window',
+        includeUncontrolled: true
+      })
+      .then((clientList) => {
+        if (clientList.length > 0) {
+          let client = clientList[0];
+          for (let i = 0; i < clientList.length; i++) {
+            if (clientList[i].focused) {
+              client = clientList[i];
+            }
+          }
+          return client.focus();
+        }
+        return clients.openWindow(event.notification.data.url || '/');
+      })
     );
   });

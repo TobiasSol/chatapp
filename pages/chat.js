@@ -63,6 +63,8 @@ export default function Chat() {
       )
       .subscribe();
 
+
+
     // Update activity status
     const updateActivity = async () => {
       try {
@@ -80,6 +82,8 @@ export default function Chat() {
         console.error('Error updating activity:', err);
       }
     };
+
+
 
     const interval = setInterval(updateActivity, 30000);
     updateActivity();
@@ -113,6 +117,9 @@ export default function Chat() {
         clearInterval(interval);
       };
     }
+
+
+    
 
     return () => {
       messagesChannel.unsubscribe();
