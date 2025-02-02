@@ -304,7 +304,7 @@ export default function Admin() {
           onToggleRead={handleToggleRead}
         />
 
-        <main className="flex-1 flex flex-col">
+        <main className="flex-1 flex flex-col min-w-0">
           <AdminHeader 
             onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
             onLogout={handleLogout}

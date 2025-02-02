@@ -252,39 +252,50 @@ export default function Chat() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-hidden p-4">
+        <main className="flex-1 overflow-hidden p-1">
           <div className="bg-gray-800/90 backdrop-blur-lg rounded-lg h-full flex flex-col">
             <ChatWindow messages={messages} currentUser={username} />
 
-            <div className="p-3 border-t border-gray-700">
+            <div className="p-2 border-t border-gray-700">
+              {/* Preview Media Section */}
               {previewMedia && (
                 <div className="mb-2">
                   {previewMedia.type === 'image' && (
-                    <img
-                      src={previewMedia.url}
-                      alt="Preview"
-                      className="w-32 h-32 rounded-lg object-cover"
-                    />
+                    <div className="relative inline-block">
+                      <img
+                        src={previewMedia.url}
+                        alt="Preview"
+                        className="h-24 w-auto rounded-lg object-cover"
+                      />
+                      <button
+                        onClick={() => setPreviewMedia(null)}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full"
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
+                      </button>
+                    </div>
                   )}
                   {previewMedia.type === 'audio' && (
                     <audio src={previewMedia.url} controls className="w-full" />
                   )}
-                  <button
-                    onClick={() => setPreviewMedia(null)}
-                    className="mt-2 text-sm text-red-500 hover:text-red-600"
-                  >
-                    Remove
-                  </button>
                 </div>
               )}
-              <div className="flex gap-2">
+
+              {/* Actions Row */}
+              <div className="flex items-center gap-2 mb-2">
                 <button
                   onClick={() => setIsEmojiPickerOpen(!isEmojiPickerOpen)}
-                  className="text-gray-400 hover:text-gray-300"
+                  className="p-2 text-gray-400 hover:text-gray-300 hover:bg-gray-700 rounded-full"
                 >
                   😀
                 </button>
                 <MediaUpload onUpload={handleMediaUpload} />
+              </div>
+
+              {/* Input Row */}
+              <div className="flex gap-2">
                 <input
                   value={inputMessage}
                   onChange={(e) => setInputMessage(e.target.value)}
@@ -303,9 +314,16 @@ export default function Chat() {
                 </button>
               </div>
 
+              {/* Emoji Picker */}
               {isEmojiPickerOpen && (
-                <div className="mt-2">
-                  <Picker data={data} onEmojiSelect={handleEmojiSelect} position="top" />
+                <div className="absolute bottom-full right-0 mb-2">
+                  <Picker
+                    data={data}
+                    onEmojiSelect={handleEmojiSelect}
+                    theme="dark"
+                    previewPosition="none"
+                    skinTonePosition="none"
+                  />
                 </div>
               )}
             </div>

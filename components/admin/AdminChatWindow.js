@@ -10,7 +10,7 @@ export function AdminChatWindow({ messages }) {
   }, [messages]);
 
   return (
-    <div className="flex-1 overflow-y-auto p-4">
+    <div className="flex-1 overflow-y-auto  sm:p-4">
       {messages.map((message) => (
         <AdminMessage key={message.id} message={message} />
       ))}
