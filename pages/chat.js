@@ -172,10 +172,65 @@ export default function Chat() {
     setIsEmojiPickerOpen(false);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    const currentUsername = localStorage.getItem('username');
+    
+    if (currentUsername) {
+      try {
+        // Update last_activity to null to mark user as offline
+        const { error } = await supabase
+          .from('guests')
+          .update({ 
+            last_activity: null,
+            status: 'offline'  // Falls Sie die status-Spalte verwenden
+          })
+          .eq('username', currentUsername);
+  
+        if (error) {
+          console.error('Error updating guest status:', error);
+          toast.error('Error updating status');
+        }
+      } catch (err) {
+        console.error('Error during logout:', err);
+      }
+    }
+  
+    // Bestehende Logout-Logik
     localStorage.removeItem('username');
     router.push('/');
   };
+
+
+
+  useEffect(() => {
+    const handleBeforeUnload = async () => {
+      const currentUsername = localStorage.getItem('username');
+      if (currentUsername) {
+        try {
+          await supabase
+            .from('guests')
+            .update({ 
+              last_activity: null,
+              status: 'offline'
+            })
+            .eq('username', currentUsername);
+        } catch (err) {
+          console.error('Error updating status on page unload:', err);
+        }
+      }
+    };
+  
+    // Event Listener für Seiten-Schließung
+    window.addEventListener('beforeunload', handleBeforeUnload);
+  
+    // Cleanup beim Komponenten-Unmount
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      handleBeforeUnload(); // Status auch beim Unmount aktualisieren
+    };
+  }, []);
+
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-700">

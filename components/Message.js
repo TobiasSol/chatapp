@@ -2,9 +2,8 @@
 export default function Message({ message, lockedImages = {}, onUnlockImage }) {
   const isAdmin = message.sender === 'admin';
   const isImage = message.content_type === 'image';
-  const isLocked = isImage && !lockedImages[message.id]; // Bild ist gesperrt, wenn es nicht freigeschaltet ist
+  const isLocked = isImage && !lockedImages[message.id];
 
-  // Formatierung der Uhrzeit im Format HH:mm
   const formattedTime = new Date(message.created_at).toLocaleTimeString([], {
     hour: '2-digit',
     minute: '2-digit',
@@ -33,21 +32,18 @@ export default function Message({ message, lockedImages = {}, onUnlockImage }) {
   };
 
   return (
-    <div className={`flex mb-4 ${isAdmin ? 'justify-end' : ''}`}>
+    <div className={`flex mb-4 ${!isAdmin ? 'justify-end' : ''}`}>
       <div
         className={`max-w-[70%] ${
-          isAdmin ? 'bg-blue-500 text-white' : 'bg-gray-100'
+          !isAdmin ? 'bg-blue-500 text-white' : 'bg-gray-100'
         } p-3 rounded-lg`}
       >
-        {/* Absender-Name nur anzeigen, wenn die Nachricht nicht vom aktuellen Benutzer stammt */}
         {!isAdmin && (
           <div className="text-sm text-gray-500 mb-1">{message.guest_name}</div>
         )}
 
-        {/* Nachrichteninhalt */}
         {renderContent()}
 
-        {/* Uhrzeit unterhalb des Nachrichteninhalts */}
         <div className="text-xs text-gray-400 mt-1 text-right">
           {formattedTime}
         </div>

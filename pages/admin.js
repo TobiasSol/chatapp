@@ -1,15 +1,17 @@
+// pages/admin.js
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import GuestList from '../components/GuestList';
-import ChatWindow from '../components/ChatWindow';
 import { Toaster, toast } from 'react-hot-toast';
-import MediaUpload from '../components/MediaUpload';
-import Picker from '@emoji-mart/react';
-import data from '@emoji-mart/data';
+
+// Importiere die ausgelagerten Komponenten
+import { AdminHeader } from '../components/admin/AdminHeader';
+import { Sidebar } from '../components/admin/Sidebar';
+import ChatArea from '../components/admin/ChatArea';
+import { EmptyState } from '../components/admin/EmptyState';
 
 export default function Admin() {
-  const router = useRouter();
+  // State Management
   const [guests, setGuests] = useState([]);
   const [selectedGuest, setSelectedGuest] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -17,7 +19,11 @@ export default function Admin() {
   const [previewMedia, setPreviewMedia] = useState(null);
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [unreadMessages, setUnreadMessages] = useState({});
+  
+  const router = useRouter();
 
+  // Auth Check
   useEffect(() => {
     const checkAuth = () => {
       const isAdmin = localStorage.getItem('isAdmin');
@@ -25,15 +31,61 @@ export default function Admin() {
         router.push('/login');
       }
     };
-    
     checkAuth();
   }, [router]);
 
+  // Initial Load von ungelesenen Nachrichten
   useEffect(() => {
+    const loadUnreadMessages = async () => {
+      try {
+        const lastLoginStr = localStorage.getItem('lastAdminLogin') || new Date().toISOString();
+        const { data: messages, error } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('sender', 'guest')
+          .gte('created_at', lastLoginStr);
+
+        if (error) throw error;
+
+        const unread = {};
+        messages?.forEach(msg => {
+          if (!unread[msg.guest_name]) {
+            unread[msg.guest_name] = 0;
+          }
+          unread[msg.guest_name]++;
+        });
+
+        setUnreadMessages(unread);
+        localStorage.setItem('lastAdminLogin', new Date().toISOString());
+      } catch (err) {
+        console.error('Error loading unread messages:', err);
+      }
+    };
+
+    loadUnreadMessages();
+  }, []);
+
+  // Guest Status Management
+  useEffect(() => {
+    const fetchGuests = async () => {
+      const { data, error } = await supabase
+        .from('guests')
+        .select('*')
+        .order('last_activity', { ascending: false });
+      
+      if (error) {
+        console.error('Error fetching guests:', error);
+        return;
+      }
+      
+      setGuests(data);
+    };
+  
     fetchGuests();
 
+    // Subscribe to guest status changes
     const guestChannel = supabase
-      .channel('guest-changes')
+      .channel('guest-status')
       .on(
         'postgres_changes',
         {
@@ -41,25 +93,61 @@ export default function Admin() {
           schema: 'public',
           table: 'guests'
         },
-        (payload) => {
-          if (payload.eventType === 'INSERT') {
-            toast.success(`New guest joined: ${payload.new.username}`);
-            fetchGuests();
-          }
-        }
+        handleGuestStatusChange
       )
       .subscribe();
 
+    // Update online status every 30 seconds
+    const statusInterval = setInterval(updateGuestsStatus, 30000);
+
     return () => {
       guestChannel.unsubscribe();
+      clearInterval(statusInterval);
     };
   }, []);
 
+  // Message tracking
+  useEffect(() => {
+    const messageChannel = supabase
+      .channel('global-messages')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages'
+        },
+        handleNewMessage
+      )
+      .subscribe();
+
+    return () => messageChannel.unsubscribe();
+  }, [selectedGuest]);
+
+  // Selected guest chat
   useEffect(() => {
     if (!selectedGuest) return;
 
-    const messageChannel = supabase
-      .channel('admin-messages')
+    const loadMessages = async () => {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('guest_name', selectedGuest.username)
+        .order('created_at', { ascending: true });
+        
+      if (error) {
+        console.error('Error loading messages:', error);
+        toast.error('Failed to load messages');
+        return;
+      }
+      
+      setMessages(data || []);
+    };
+
+    loadMessages();
+
+    const chatChannel = supabase
+      .channel(`chat-${selectedGuest.username}`)
       .on(
         'postgres_changes',
         {
@@ -74,36 +162,80 @@ export default function Admin() {
       )
       .subscribe();
 
-    return () => {
-      messageChannel.unsubscribe();
-    };
+    return () => chatChannel.unsubscribe();
   }, [selectedGuest]);
 
-  const fetchGuests = async () => {
-    const { data } = await supabase
-      .from('guests')
-      .select('*')
-      .order('created_at', { ascending: false });
-    setGuests(data || []);
+  // Event Handlers
+  const handleGuestStatusChange = (payload) => {
+    if (payload.eventType === 'INSERT') {
+      const newGuest = {
+        ...payload.new,
+        isOnline: payload.new.last_activity ? 
+          (new Date().getTime() - new Date(payload.new.last_activity).getTime() <= 2 * 60 * 1000) : 
+          false
+      };
+      
+      setGuests(prev => [newGuest, ...prev]);
+      toast.success(`New guest joined: ${payload.new.username}`);
+    } else if (payload.eventType === 'UPDATE') {
+      setGuests(prev => prev.map(guest => 
+        guest.id === payload.new.id ? {
+          ...guest,
+          ...payload.new,
+          isOnline: payload.new.last_activity ? 
+            (new Date().getTime() - new Date(payload.new.last_activity).getTime() <= 2 * 60 * 1000) : 
+            false
+        } : guest
+      ));
+    }
   };
 
-  const handleGuestSelect = async (guest) => {
+  const handleNewMessage = (payload) => {
+    if (payload.new.sender === 'guest') {
+      if (!selectedGuest || selectedGuest.username !== payload.new.guest_name) {
+        setUnreadMessages(prev => ({
+          ...prev,
+          [payload.new.guest_name]: (prev[payload.new.guest_name] || 0) + 1
+        }));
+      }
+    }
+  };
+
+  const updateGuestsStatus = () => {
+    setGuests(currentGuests => 
+      currentGuests.map(guest => ({
+        ...guest,
+        isOnline: guest.last_activity ? 
+          (new Date().getTime() - new Date(guest.last_activity).getTime() <= 2 * 60 * 1000) : 
+          false
+      }))
+    );
+  };
+
+  const handleGuestSelect = (guest) => {
     setSelectedGuest(guest);
     setIsSidebarOpen(false);
-    
-    const { data, error } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('guest_name', guest.username)
-      .order('created_at', { ascending: true });
-      
-    if (error) {
-      console.error('Error loading messages:', error);
-      toast.error('Failed to load messages');
-      return;
-    }
-    
-    setMessages(data || []);
+    setUnreadMessages(prev => {
+      const newUnreadMessages = { ...prev };
+      if (newUnreadMessages[guest.username]) {
+        delete newUnreadMessages[guest.username];
+      }
+      return newUnreadMessages;
+    });
+  };
+
+  const handleToggleRead = (guestName) => {
+    setUnreadMessages(prev => {
+      const newUnreadMessages = { ...prev };
+      if (newUnreadMessages[guestName]) {
+        delete newUnreadMessages[guestName];
+        toast.success(`Marked ${guestName}'s messages as read`);
+      } else {
+        newUnreadMessages[guestName] = 1;
+        toast.success(`Marked ${guestName}'s messages as unread`);
+      }
+      return newUnreadMessages;
+    });
   };
 
   const handleSend = async () => {
@@ -163,142 +295,37 @@ export default function Admin() {
       <Toaster position="top-right" />
 
       <div className="flex h-screen">
-        <aside
-          className={`fixed md:relative w-80 bg-gray-800/90 backdrop-blur-lg shadow-lg transform transition-transform duration-300 ease-in-out ${
-            isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-          } md:translate-x-0 z-20`}
-        >
-          <div className="p-4 border-b border-gray-700">
-            <h1 className="text-xl font-bold text-white">Admin Dashboard</h1>
-            <p className="text-sm text-gray-400 mt-1">Active Guests: {guests.length}</p>
-          </div>
-          <GuestList guests={guests} onSelect={handleGuestSelect} selected={selectedGuest} />
-        </aside>
+        <Sidebar 
+          isOpen={isSidebarOpen}
+          guests={guests}
+          onGuestSelect={handleGuestSelect}
+          selectedGuest={selectedGuest}
+          unreadMessages={unreadMessages}
+          onToggleRead={handleToggleRead}
+        />
 
         <main className="flex-1 flex flex-col">
-          <header className="px-4 py-3 bg-gray-800/90 backdrop-blur-lg flex justify-between items-center">
-            <div className="flex items-center">
-              <button
-                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                className="md:hidden text-white focus:outline-none"
-              >
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 6h16M4 12h16m-7 6h7"
-                  />
-                </svg>
-              </button>
-              <h1 className="text-xl font-bold text-white ml-2">Admin Dashboard</h1>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="px-4 py-2 text-sm text-white/80 hover:text-white transition-colors"
-            >
-              Logout
-            </button>
-          </header>
+          <AdminHeader 
+            onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+            onLogout={handleLogout}
+          />
 
           {selectedGuest ? (
-            <>
-              <div className="bg-gray-800/90 backdrop-blur-lg p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                  <h2 className="text-lg font-medium text-white">{selectedGuest.username}</h2>
-                  <span className="text-sm text-gray-400">
-                    Joined {new Date(selectedGuest.created_at).toLocaleString()}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex-1 p-4 overflow-hidden flex flex-col">
-                <div className="flex-1 bg-gray-800/90 backdrop-blur-lg rounded-lg shadow-sm overflow-hidden mb-4">
-                  <ChatWindow messages={messages} currentUser="admin" />
-                </div>
-
-                <div className="flex flex-col gap-3">
-                  {previewMedia && (
-                    <div className="mb-2">
-                      {previewMedia.type === 'image' && (
-                        <img
-                          src={previewMedia.url}
-                          alt="Preview"
-                          className="w-32 h-32 rounded-lg object-cover"
-                        />
-                      )}
-                      {previewMedia.type === 'audio' && (
-                        <audio src={previewMedia.url} controls className="w-full" />
-                      )}
-                      <button
-                        onClick={() => setPreviewMedia(null)}
-                        className="mt-2 text-sm text-red-500 hover:text-red-600"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  )}
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setIsEmojiPickerOpen(!isEmojiPickerOpen)}
-                      className="text-gray-400 hover:text-gray-300"
-                    >
-                      😀
-                    </button>
-                    <MediaUpload onUpload={handleMediaUpload} />
-                    <input
-                      type="text"
-                      value={inputMessage}
-                      onChange={(e) => setInputMessage(e.target.value)}
-                      onKeyPress={(e) => {
-                        if (e.key === 'Enter') handleSend();
-                      }}
-                      className="flex-1 p-3 rounded-lg bg-gray-700 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Type your message..."
-                    />
-                    <button
-                      onClick={handleSend}
-                      disabled={!inputMessage.trim() && !previewMedia}
-                      className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      Send
-                    </button>
-                  </div>
-
-                  {isEmojiPickerOpen && (
-                    <div className="mt-2">
-                      <Picker data={data} onEmojiSelect={handleEmojiSelect} position="top" />
-                    </div>
-                  )}
-                </div>
-              </div>
-            </>
+            <ChatArea 
+              selectedGuest={selectedGuest}
+              messages={messages}
+              inputMessage={inputMessage}
+              setInputMessage={setInputMessage}
+              previewMedia={previewMedia}
+              setPreviewMedia={setPreviewMedia}
+              isEmojiPickerOpen={isEmojiPickerOpen}
+              setIsEmojiPickerOpen={setIsEmojiPickerOpen}
+              onSend={handleSend}
+              onEmojiSelect={handleEmojiSelect}
+              onMediaUpload={handleMediaUpload}
+            />
           ) : (
-            <div className="flex-1 flex items-center justify-center text-gray-400">
-              <div className="text-center">
-                <svg
-                  className="w-16 h-16 mb-4 mx-auto text-gray-500"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                  />
-                </svg>
-                <p className="font-medium">Select a guest to start chatting</p>
-              </div>
-            </div>
+            <EmptyState />
           )}
         </main>
       </div>

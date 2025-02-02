@@ -12,14 +12,16 @@ export default function GuestList({ guests, onSelect, selected }) {
           }`}
         >
           <div className="flex items-center gap-3">
-            <div className="w-2 h-2 rounded-full bg-green-500"></div>
+            <div className={`w-2 h-2 rounded-full ${
+              guest.status === 'online' ? 'bg-green-500' : 'bg-gray-500'
+            }`}></div>
             <div>
               <div className="font-medium text-white">{guest.username}</div>
-              <div className="text-sm text-gray-500">Online</div>
+              <div className="text-sm text-gray-500">{guest.status}</div>
             </div>
           </div>
         </div>
       ))}
     </div>
-  )
+  );
 }
