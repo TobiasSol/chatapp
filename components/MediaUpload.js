@@ -1,36 +1,78 @@
-// components/MediaUpload.js
-import { useState } from 'react';
+import { useState, useRef } from 'react';
+import { toast } from 'react-hot-toast';
 
-const MediaUpload = ({ onUpload }) => {
-  const [preview, setPreview] = useState(null);
+const MediaUpload = ({ onUpload, maxFileSize = 5242880 }) => { // 5MB default
+  const fileInputRef = useRef(null);
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  const validateFile = (file) => {
+    // Check file size
+    if (file.size > maxFileSize) {
+      toast.error(`File too large. Maximum size is ${maxFileSize / 1024 / 1024}MB`);
+      return false;
+    }
 
-    const fileType = file.type.split('/')[0]; // 'image', 'audio', etc.
-    const fileUrl = URL.createObjectURL(file);
+    // Check file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'audio/mpeg', 'audio/wav', 'video/mp4'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Unsupported file type');
+      return false;
+    }
 
-    setPreview({ url: fileUrl, type: fileType });
-    onUpload(fileUrl, file.type);
+    return true;
+  };
+
+  const handleFileChange = async (e) => {
+    try {
+      const files = Array.from(e.target.files);
+      if (files.length === 0) return;
+
+      const validFiles = files.filter(validateFile);
+      
+      if (validFiles.length === 0) {
+        return;
+      }
+
+      const uploads = validFiles.map(file => ({
+        originalFile: file,
+        type: file.type,
+        name: file.name,
+        size: file.size,
+        previewUrl: URL.createObjectURL(file)
+      }));
+
+      onUpload(uploads);
+      
+      // Reset input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    } catch (error) {
+      console.error('Error processing files:', error);
+      toast.error('Error processing files');
+    }
   };
 
   return (
     <div className="flex items-center gap-2">
       <input
+        ref={fileInputRef}
         type="file"
         accept="image/*,audio/*,video/*"
         onChange={handleFileChange}
         className="hidden"
         id="media-upload"
+        multiple
       />
-      <label htmlFor="media-upload" className="cursor-pointer text-gray-400 hover:text-gray-300">
+      <label 
+        htmlFor="media-upload" 
+        className="cursor-pointer text-gray-400 hover:text-gray-300 transition-colors"
+        title="Upload media"
+      >
         <svg
           className="w-6 h-6"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
-          xmlns="http://www.w3.org/2000/svg"
         >
           <path
             strokeLinecap="round"
@@ -40,23 +82,6 @@ const MediaUpload = ({ onUpload }) => {
           />
         </svg>
       </label>
-
-      {preview && (
-        <div className="relative w-16 h-16 rounded-lg overflow-hidden">
-          {preview.type === 'image' && (
-            <img src={preview.url} alt="Preview" className="w-full h-full object-cover" />
-          )}
-          {preview.type === 'audio' && (
-            <audio src={preview.url} controls className="w-full h-full" />
-          )}
-          <button
-            onClick={() => setPreview(null)}
-            className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
-          >
-            ✕
-          </button>
-        </div>
-      )}
     </div>
   );
 };

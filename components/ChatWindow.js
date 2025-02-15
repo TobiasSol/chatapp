@@ -1,9 +1,7 @@
-// components/ChatWindow.js
-import { useEffect, useRef } from 'react'
-import Message from './Message'
+import { useEffect, useRef } from 'react';
+import Message from './Message';
 
-// components/ChatWindow.js
-export default function ChatWindow({ messages, currentUser, lockedImages, onUnlockImage }) {
+export default function ChatWindow({ messages, currentUser, readReceiptsEnabled, onUnsend }) {
   const bottomRef = useRef();
 
   useEffect(() => {
@@ -11,13 +9,14 @@ export default function ChatWindow({ messages, currentUser, lockedImages, onUnlo
   }, [messages]);
 
   return (
-    <div className="h-[600px] overflow-y-auto p-4 border rounded">
+    <div className="h-full overflow-y-auto px-4 py-6 space-y-4">
       {messages.map((msg) => (
         <Message
           key={msg.id}
           message={msg}
-          lockedImages={lockedImages}
-          onUnlockImage={onUnlockImage} // onUnlockImage wird weitergeleitet
+          currentUser={currentUser}
+          readReceiptsEnabled={readReceiptsEnabled}
+          onUnsend={onUnsend}
         />
       ))}
       <div ref={bottomRef} />

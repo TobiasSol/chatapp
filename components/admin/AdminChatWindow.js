@@ -1,8 +1,7 @@
-// components/admin/AdminChatWindow.js
 import { useEffect, useRef } from 'react';
-import AdminMessage from './AdminMessage';
+import Message from '../Message';
 
-export function AdminChatWindow({ messages }) {
+export function AdminChatWindow({ messages, readReceiptsEnabled }) {
   const bottomRef = useRef();
   const containerRef = useRef();
 
@@ -17,7 +16,12 @@ export function AdminChatWindow({ messages }) {
     >
       <div className="max-w-3xl mx-auto">
         {messages.map((message) => (
-          <AdminMessage key={message.id} message={message} />
+          <Message
+            key={message.id}
+            message={message}
+            isAdmin={true}
+            readReceiptsEnabled={readReceiptsEnabled}
+          />
         ))}
         <div ref={bottomRef} />
       </div>

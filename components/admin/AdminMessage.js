@@ -1,6 +1,7 @@
 export default function AdminMessage({ message }) {
   const isAdmin = message.sender === 'admin';
   const isImage = message.content_type === 'image';
+  const isLocked = message.is_locked !== false;
   
   const formattedTime = new Date(message.created_at).toLocaleTimeString([], {
     hour: '2-digit',
@@ -9,13 +10,32 @@ export default function AdminMessage({ message }) {
 
   const renderContent = () => {
     if (isImage) {
+      const images = Array.isArray(message.content) 
+        ? message.content 
+        : [message.content];
+      
       return (
-        <div className="relative w-full">
-          <img 
-            src={message.content} 
-            className="max-w-full h-auto rounded-lg" 
-            alt="Chat Image" 
-          />
+        <div>
+          <div className="flex flex-wrap gap-2 max-w-[600px]">
+            {images.map((img, index) => (
+              <div key={index} className="relative w-24 h-24">
+                <img 
+                  src={typeof img === 'string' ? img : img.url} 
+                  className="w-24 h-24 object-cover rounded-lg"
+                  alt="Chat Image"
+                />
+              </div>
+            ))}
+          </div>
+          {message.price && (
+            <div className="mt-2 bg-black/50 text-white text-xs p-1 rounded-lg text-center">
+              {isLocked ? (
+                <span>Angeboten für ${message.price}</span>
+              ) : (
+                <span>Gekauft für ${message.price}</span>
+              )}
+            </div>
+          )}
         </div>
       );
     }

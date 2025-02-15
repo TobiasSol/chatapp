@@ -1,10 +1,7 @@
-// pages/admin.js
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Toaster, toast } from 'react-hot-toast';
-
-// Importiere die ausgelagerten Komponenten
 import { AdminHeader } from '../components/admin/AdminHeader';
 import { Sidebar } from '../components/admin/Sidebar';
 import ChatArea from '../components/admin/ChatArea';
@@ -20,6 +17,8 @@ export default function Admin() {
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [unreadMessages, setUnreadMessages] = useState({});
+  const [imagePrice, setImagePrice] = useState('');
+  const [readReceiptsEnabled, setReadReceiptsEnabled] = useState(true);
   
   const router = useRouter();
 
@@ -34,7 +33,29 @@ export default function Admin() {
     checkAuth();
   }, [router]);
 
-  // Initial Load von ungelesenen Nachrichten
+  // Load read receipts setting when guest changes
+  useEffect(() => {
+    const loadReadReceiptsSetting = async () => {
+      if (!selectedGuest) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('guests')
+          .select('read_receipts_enabled')
+          .eq('username', selectedGuest.username)
+          .single();
+
+        if (error) throw error;
+        setReadReceiptsEnabled(data?.read_receipts_enabled ?? true);
+      } catch (err) {
+        console.error('Error loading read receipts setting:', err);
+      }
+    };
+
+    loadReadReceiptsSetting();
+  }, [selectedGuest]);
+
+  // Initial Load of unread messages
   useEffect(() => {
     const loadUnreadMessages = async () => {
       try {
@@ -43,6 +64,7 @@ export default function Admin() {
           .from('messages')
           .select('*')
           .eq('sender', 'guest')
+          .eq('is_read', false)
           .gte('created_at', lastLoginStr);
 
         if (error) throw error;
@@ -113,11 +135,19 @@ export default function Admin() {
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: '*',
           schema: 'public',
           table: 'messages'
         },
-        handleNewMessage
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            handleNewMessage(payload);
+          } else if (payload.eventType === 'UPDATE') {
+            setMessages(prev => prev.map(msg => 
+              msg.id === payload.new.id ? payload.new : msg
+            ));
+          }
+        }
       )
       .subscribe();
 
@@ -142,6 +172,22 @@ export default function Admin() {
       }
       
       setMessages(data || []);
+
+      // Mark messages as delivered
+      const undeliveredMessages = data?.filter(msg => 
+        msg.sender === 'guest' && !msg.is_delivered
+      ) || [];
+
+      if (undeliveredMessages.length > 0) {
+        const { error: updateError } = await supabase
+          .from('messages')
+          .update({ is_delivered: true })
+          .in('id', undeliveredMessages.map(msg => msg.id));
+
+        if (updateError) {
+          console.error('Error marking messages as delivered:', updateError);
+        }
+      }
     };
 
     loadMessages();
@@ -151,13 +197,26 @@ export default function Admin() {
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: '*',
           schema: 'public',
           table: 'messages',
           filter: `guest_name=eq.${selectedGuest.username}`
         },
         (payload) => {
-          setMessages(prev => [...prev, payload.new]);
+          if (payload.eventType === 'INSERT') {
+            setMessages(prev => [...prev, payload.new]);
+            
+            // Automatically mark guest messages as delivered when received
+            if (payload.new.sender === 'guest') {
+              markMessageAsDelivered(payload.new.id);
+            }
+          } else if (payload.eventType === 'UPDATE') {
+            setMessages(prev => 
+              prev.map(msg => 
+                msg.id === payload.new.id ? payload.new : msg
+              )
+            );
+          }
         }
       )
       .subscribe();
@@ -165,7 +224,6 @@ export default function Admin() {
     return () => chatChannel.unsubscribe();
   }, [selectedGuest]);
 
-  // Event Handlers
   const handleGuestStatusChange = (payload) => {
     if (payload.eventType === 'INSERT') {
       const newGuest = {
@@ -201,6 +259,32 @@ export default function Admin() {
     }
   };
 
+  const markMessageAsDelivered = async (messageId) => {
+    try {
+      const { error } = await supabase
+        .from('messages')
+        .update({ is_delivered: true })
+        .eq('id', messageId);
+
+      if (error) throw error;
+    } catch (err) {
+      console.error('Error marking message as delivered:', err);
+    }
+  };
+
+  const markMessageAsRead = async (messageId) => {
+    try {
+      const { error } = await supabase
+        .from('messages')
+        .update({ is_read: true })
+        .eq('id', messageId);
+
+      if (error) throw error;
+    } catch (err) {
+      console.error('Error marking message as read:', err);
+    }
+  };
+
   const updateGuestsStatus = () => {
     setGuests(currentGuests => 
       currentGuests.map(guest => ({
@@ -224,50 +308,58 @@ export default function Admin() {
     });
   };
 
-  const handleToggleRead = (guestName) => {
-    setUnreadMessages(prev => {
-      const newUnreadMessages = { ...prev };
-      if (newUnreadMessages[guestName]) {
-        delete newUnreadMessages[guestName];
-        toast.success(`Marked ${guestName}'s messages as read`);
-      } else {
-        newUnreadMessages[guestName] = 1;
-        toast.success(`Marked ${guestName}'s messages as unread`);
-      }
-      return newUnreadMessages;
-    });
-  };
-
-  const handleSend = async () => {
+  const handleToggleReadReceipts = async () => {
     if (!selectedGuest) return;
 
-    let content = inputMessage.trim();
-    let contentType = 'text';
-
-    if (previewMedia) {
-      content = previewMedia.url;
-      contentType = previewMedia.type;
-    }
-
-    if (!content) return;
-
     try {
-      const { error } = await supabase.from('messages').insert([
-        {
-          content,
-          content_type: contentType,
-          guest_name: selectedGuest.username,
-          sender: 'admin',
-        },
-      ]);
+      const { error } = await supabase
+        .from('guests')
+        .update({ read_receipts_enabled: !readReceiptsEnabled })
+        .eq('username', selectedGuest.username);
 
       if (error) throw error;
 
-      setInputMessage('');
-      setPreviewMedia(null);
+      setReadReceiptsEnabled(!readReceiptsEnabled);
+      toast.success(`Read receipts ${!readReceiptsEnabled ? 'enabled' : 'disabled'}`);
+    } catch (err) {
+      console.error('Error toggling read receipts:', err);
+      toast.error('Failed to toggle read receipts');
+    }
+  };
+
+  const handleSend = async (content, contentType = 'text', price = null) => {
+    if (!selectedGuest) return;
+    
+    try {
+      let messageData = {
+        content_type: contentType,
+        guest_name: selectedGuest.username,
+        sender: 'admin',
+        is_locked: price !== null,
+        is_delivered: false,
+        is_read: false,
+        is_unsent: false
+      };
+  
+      if (contentType === 'image') {
+        if (content.files) {
+          messageData.content = content.files;
+          messageData.price = content.price;
+        } else {
+          messageData.content = content;
+          messageData.price = price;
+        }
+      } else {
+        messageData.content = content;
+      }
+  
+      const { error } = await supabase.from('messages').insert([messageData]);
+  
+      if (error) throw error;
     } catch (error) {
       console.error('Error sending message:', error);
       toast.error('Failed to send message');
+      throw error;
     }
   };
 
@@ -276,7 +368,17 @@ export default function Admin() {
       setPreviewMedia(null);
       return;
     }
-    setPreviewMedia({ url, type: fileType.split('/')[0] });
+
+    let type = 'file';
+    if (fileType) {
+      const [mainType] = fileType.split('/');
+      type = mainType || 'file';
+    }
+
+    setPreviewMedia({
+      url: url,
+      type: type
+    });
   };
 
   const handleEmojiSelect = (emoji) => {
@@ -301,7 +403,6 @@ export default function Admin() {
           onGuestSelect={handleGuestSelect}
           selectedGuest={selectedGuest}
           unreadMessages={unreadMessages}
-          onToggleRead={handleToggleRead}
         />
 
         <main className="flex-1 flex flex-col min-w-0">
@@ -323,6 +424,12 @@ export default function Admin() {
               onSend={handleSend}
               onEmojiSelect={handleEmojiSelect}
               onMediaUpload={handleMediaUpload}
+              imagePrice={imagePrice}
+              setImagePrice={setImagePrice}
+              readReceiptsEnabled={readReceiptsEnabled}
+              onToggleReadReceipts={handleToggleReadReceipts}
+              onMarkAsRead={markMessageAsRead}
+              onMarkAsDelivered={markMessageAsDelivered}
             />
           ) : (
             <EmptyState />
